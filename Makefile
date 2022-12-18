@@ -1,4 +1,6 @@
-APP = mspview
+
+prefix ?= $$HOME/.local
+APP = msptest
 all: $(APP)
 
 $(APP):	$(wildcard *.go) go.sum
