@@ -69,7 +69,7 @@ func drawText(s tcell.Screen, x, y int, style tcell.Style, text string) {
 }
 
 func show_prompts(s tcell.Screen) {
-	drawText(s, 32, 2, tcell.StyleDefault.Reverse(true), "MSP Simple View")
+	drawText(s, 32, 2, tcell.StyleDefault.Reverse(true).Bold(true), "MSP Simple View")
 	drawText(s, 0, height-1, defstyle, "Ctrl-C or q to exit")
 	for _, u := range uiset {
 		drawText(s, 0, u.y, defstyle, u.prompt)
