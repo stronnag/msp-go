@@ -159,6 +159,7 @@ func main() {
 
 	serok := false
 	rates := ""
+
 	go func() {
 		for {
 			portnam := ""
@@ -257,7 +258,29 @@ func main() {
 								s := fmt.Sprintf("volts: %.1f, psum: %d, amps: %.2f", volts, psum, amps)
 								set_value(IY_ANALOG, s, termbox.AttrBold)
 							}
+							if mspvers == 2 {
+								sp.MSPCommand(Msp_INAV_STATUS)
+							} else {
+								sp.MSPCommand(Msp_STATUS_EX)
+							}
+
+						case Msp_INAV_STATUS:
+							if v.ok {
+								armf := binary.LittleEndian.Uint32(v.data[9:13])
+								s := arm_status(armf)
+								set_value(IY_ARM, s, termbox.AttrBold)
+								sp.MSPCommand(Msp_RAW_GPS)
+							} else {
+								sp.MSPCommand(Msp_STATUS_EX)
+							}
+						case Msp_STATUS_EX:
+							if v.ok {
+								armf := binary.LittleEndian.Uint16(v.data[13:15])
+								s := arm_status(uint32(armf))
+								set_value(IY_ARM, s, termbox.AttrBold)
+							}
 							sp.MSPCommand(Msp_RAW_GPS)
+
 						case Msp_RAW_GPS:
 							if v.ok {
 								fix := v.data[0]
@@ -302,4 +325,26 @@ func main() {
 	<-done
 	termbox.Close()
 	fmt.Println(rates)
+}
+
+func arm_status(status uint32) string {
+	armfails := [...]string{"", "", "Armed", "", "", "", "",
+		"F/S", "Level", "Calibrate", "Overload",
+		"NavUnsafe", "MagCal", "AccCal", "ArmSwitch", "H/wFail",
+		"Box F/S", "Box kill", "RCLink", "Throttle", "CLI",
+		"CMS", "OSD", "Roll/Pitch", "Autotrim", "OOM",
+		"Settings", "PWM Out", "PreArm", "DSHOTBeep", "Landed", "Other",
+	}
+
+	if status == 0 {
+		return "Ready to arm"
+	} else {
+		s := ""
+		for i := 0; i < len(armfails); i++ {
+			if ((status & (1 << i)) != 0) && armfails[i] != "" {
+				s = s + armfails[i] + " "
+			}
+		}
+		return s
+	}
 }

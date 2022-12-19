@@ -20,6 +20,8 @@ const (
 	Msp_RAW_GPS     uint16 = 106
 	Msp_ANALOG      uint16 = 110
 	Msp_DEBUG       uint16 = 253
+	Msp_STATUS_EX   uint16 = 150
+	Msp_INAV_STATUS uint16 = 0x2000
 	Msp_MISC2       uint16 = 0x203a
 	Msp_FAIL        uint16 = 0xffff
 )
