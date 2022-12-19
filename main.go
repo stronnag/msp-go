@@ -331,9 +331,9 @@ func arm_status(status uint32) string {
 	armfails := [...]string{"", "", "Armed", "", "", "", "",
 		"F/S", "Level", "Calibrate", "Overload",
 		"NavUnsafe", "MagCal", "AccCal", "ArmSwitch", "H/wFail",
-		"Box F/S", "Box kill", "RCLink", "Throttle", "CLI",
+		"BoxF/S", "BoxKill", "RCLink", "Throttle", "CLI",
 		"CMS", "OSD", "Roll/Pitch", "Autotrim", "OOM",
-		"Settings", "PWM Out", "PreArm", "DSHOTBeep", "Landed", "Other",
+		"Settings", "PWM Out", "PreArm", "DSHOTBeep", "Land", "Other",
 	}
 
 	if status == 0 {
