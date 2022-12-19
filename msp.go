@@ -274,7 +274,9 @@ func NewMSPSerial(dname string, c0 chan SChan, v2 bool) (*MSPSerial, error) {
 	p, err := serial.Open(dname, mode)
 
 	if err == nil {
+		p.ResetInputBuffer()
 		m := &MSPSerial{p, v2}
+
 		go m.Reader(c0)
 		return m, nil
 	} else {

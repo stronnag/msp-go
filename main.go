@@ -1,16 +1,14 @@
 package main
 
 import (
-	"bytes"
 	"encoding/binary"
 	"flag"
 	"fmt"
-	"github.com/xo/terminfo"
+	"github.com/mattn/go-runewidth"
+	"github.com/nsf/termbox-go"
 	"go.bug.st/serial/enumerator"
 	"log"
 	"os"
-	"os/signal"
-	"syscall"
 	"time"
 )
 
@@ -19,6 +17,74 @@ type SChan struct {
 	cmd  uint16
 	ok   bool
 	data []byte
+}
+
+const (
+	IY_PORT = 4 + iota
+	IY_MW
+	IY_NAME
+	IY_APIV
+	IY_FC
+	IY_FCVERS
+	IY_BUILD
+	IY_BOARD
+	IY_WPINFO
+	IY_UPTIME
+	IY_ANALOG
+	IY_GPS
+	IY_ARM
+	IY_RATE
+)
+
+var uiset = []struct {
+	y      int
+	prompt string
+}{
+	{IY_PORT, "Port"},
+	{IY_MW, "MW Vers"},
+	{IY_NAME, "Name"},
+	{IY_APIV, "API Vers"},
+	{IY_FC, "FC"},
+	{IY_FCVERS, "FC Vers"},
+	{IY_BUILD, "Build"},
+	{IY_BOARD, "Board"},
+	{IY_WPINFO, "WP Info"},
+	{IY_UPTIME, "Uptime"},
+	{IY_ANALOG, "Power"},
+	{IY_GPS, "GPS"},
+	{IY_ARM, "Arming"},
+	{IY_RATE, "Rate"},
+}
+
+var (
+	width  int
+	height int
+)
+
+func tbprint(x, y int, fg, bg termbox.Attribute, msg string) {
+	for _, c := range msg {
+		termbox.SetCell(x, y, c, fg, bg)
+		x += runewidth.RuneWidth(c)
+	}
+}
+
+func show_prompts() {
+	for _, u := range uiset {
+		tbprint(0, u.y, termbox.ColorDefault, termbox.ColorDefault, u.prompt)
+		termbox.SetCell(8, u.y, ':', termbox.ColorDefault, termbox.ColorDefault)
+		set_no_value(u.y)
+	}
+}
+
+func set_value(id int, val string, attr termbox.Attribute) {
+	tbprint(10, id, termbox.ColorDefault|attr, termbox.ColorDefault, val)
+	for j := 10 + len(val); j < width; j++ {
+		termbox.SetCell(j, id, ' ', termbox.ColorDefault, termbox.ColorDefault)
+	}
+}
+
+func set_no_value(id int) {
+	set_value(id, "---", termbox.AttrDim)
 }
 
 func enumerate_ports() string {
@@ -42,7 +108,6 @@ func enumerate_ports() string {
 func main() {
 	devnam := ""
 	xsleep := false
-	xonce := false
 	mspvers := 2
 
 	flag.Usage = func() {
@@ -52,7 +117,6 @@ func main() {
 
 	flag.IntVar(&mspvers, "mspversion", 2, "MSP Version")
 	flag.BoolVar(&xsleep, "slow", false, "Slow mode")
-	flag.BoolVar(&xonce, "once", false, "Once only")
 	flag.Parse()
 	files := flag.Args()
 	if len(files) > 0 {
@@ -63,22 +127,29 @@ func main() {
 		devnam = "auto"
 	}
 
-	ti, err := terminfo.LoadFromEnv()
+	err := termbox.Init()
 	if err != nil {
-		log.Fatal(err)
+		fmt.Println(err)
+		os.Exit(1)
 	}
 
-	defer func() {
-		termreset(ti)
-		if err != nil {
-			log.Fatal(err)
+	width, height = termbox.Size()
+	tbprint(32, 2, termbox.AttrReverse, termbox.AttrReverse, "MSP View")
+	tbprint(0, height-1, termbox.ColorDefault, termbox.ColorDefault, "Ctrl-C or q to exit")
+
+	show_prompts()
+	termbox.Flush()
+	done := make(chan struct{})
+	go func() {
+		for {
+			switch ev := termbox.PollEvent(); ev.Type {
+			case termbox.EventKey:
+				if ev.Ch == 'q' || ev.Key == termbox.KeyCtrlC {
+					done <- struct{}{}
+				}
+			}
 		}
 	}()
-
-	terminit(ti)
-
-	c := make(chan os.Signal, 1)
-	signal.Notify(c, os.Interrupt, syscall.SIGTERM, syscall.SIGINT)
 
 	nmsg := 0
 
@@ -86,9 +157,8 @@ func main() {
 	var sp *MSPSerial
 	c0 := make(chan SChan)
 
-	upset := 3
 	serok := false
-
+	rates := ""
 	go func() {
 		for {
 			portnam := ""
@@ -100,7 +170,7 @@ func main() {
 			if portnam != "" {
 				sp, err = NewMSPSerial(portnam, c0, (mspvers == 2))
 				if err == nil {
-					fmt.Printf("Opened %s\n", portnam)
+					set_value(IY_PORT, portnam, termbox.AttrBold)
 					nmsg = 0
 					serok = true
 					sp.MSPCommand(Msp_IDENT)
@@ -115,35 +185,37 @@ func main() {
 						case Msp_IDENT:
 							start = time.Now()
 							if v.ok {
-								fmt.Printf("MW Compat: %d, (msp protocol v%d)\n", v.data[0], mspvers)
+								s := fmt.Sprintf("MW Compat: %d, (msp protocol v%d)", v.data[0], mspvers)
+								set_value(IY_MW, s, termbox.AttrBold)
 							}
 							sp.MSPCommand(Msp_NAME)
 						case Msp_NAME:
 							if v.ok && v.len > 0 {
-								fmt.Printf("Name: \"%s\"\n", string(v.data))
-							} else {
-								fmt.Println("(noname)\n")
+								set_value(IY_NAME, string(v.data), termbox.AttrBold)
 							}
 							sp.MSPCommand(Msp_API_VERSION)
 						case Msp_API_VERSION:
 							if v.ok && v.len > 2 {
-								fmt.Printf("API %d.%d\n", v.data[1], v.data[2])
+								s := fmt.Sprintf("%d.%d", v.data[1], v.data[2])
+								set_value(IY_APIV, s, termbox.AttrBold)
 							}
 							sp.MSPCommand(Msp_FC_VARIANT)
 						case Msp_FC_VARIANT:
 							if v.ok {
-								fmt.Printf("Variant: %s\n", string(v.data[0:4]))
+								set_value(IY_FC, string(v.data[0:4]), termbox.AttrBold)
 							}
 							sp.MSPCommand(Msp_FC_VERSION)
 						case Msp_FC_VERSION:
 							if v.ok {
-								fmt.Printf("Version: %d.%d.%d\n", v.data[0], v.data[1], v.data[2])
+								s := fmt.Sprintf("%d.%d.%d", v.data[0], v.data[1], v.data[2])
+								set_value(IY_FCVERS, s, termbox.AttrBold)
 							}
 							sp.MSPCommand(Msp_BUILD_INFO)
 						case Msp_BUILD_INFO:
 							if v.ok {
-								fmt.Printf("Build: %s %s (%s)\n", string(v.data[0:11]),
+								s := fmt.Sprintf("%s %s (%s)", string(v.data[0:11]),
 									string(v.data[11:19]), string(v.data[19:]))
+								set_value(IY_BUILD, s, termbox.AttrBold)
 							}
 							sp.MSPCommand(Msp_BOARD_INFO)
 						case Msp_BOARD_INFO:
@@ -154,7 +226,7 @@ func main() {
 								} else {
 									board = string(v.data[0:4])
 								}
-								fmt.Printf("Board: %s\n", board)
+								set_value(IY_BOARD, board, termbox.AttrBold)
 							}
 							sp.MSPCommand(Msp_WP_GETINFO)
 						case Msp_WP_GETINFO:
@@ -162,7 +234,8 @@ func main() {
 								wp_max := v.data[1]
 								wp_valid := v.data[2]
 								wp_count := v.data[3]
-								fmt.Printf("WPINFO: %d of %d, valid %d\n", wp_count, wp_max, wp_valid)
+								s := fmt.Sprintf("%d of %d, valid %d", wp_count, wp_max, wp_valid)
+								set_value(IY_WPINFO, s, termbox.AttrBold)
 							}
 							if mspvers == 2 {
 								sp.MSPCommand(Msp_MISC2)
@@ -172,9 +245,8 @@ func main() {
 						case Msp_MISC2:
 							if v.ok {
 								uptime := binary.LittleEndian.Uint32(v.data[0:4])
-								fmt.Printf("MISC2: uptime %d", uptime)
-								termclrLF(ti)
-								upset = 4
+								s := fmt.Sprintf("%ds", uptime)
+								set_value(IY_UPTIME, s, termbox.AttrBold)
 							}
 							sp.MSPCommand(Msp_ANALOG)
 						case Msp_ANALOG:
@@ -182,11 +254,9 @@ func main() {
 								volts := float64(v.data[0]) / 10.0
 								psum := binary.LittleEndian.Uint16(v.data[1:3])
 								amps := float64(binary.LittleEndian.Uint16(v.data[5:7])) / 100.0
-								fmt.Printf("ANA: v: %.1f, psum: %d, amps: %.2f", volts, psum, amps)
-							} else {
-								fmt.Printf("ANA: n/a")
+								s := fmt.Sprintf("volts: %.1f, psum: %d, amps: %.2f", volts, psum, amps)
+								set_value(IY_ANALOG, s, termbox.AttrBold)
 							}
-							termclrLF(ti)
 							sp.MSPCommand(Msp_RAW_GPS)
 						case Msp_RAW_GPS:
 							if v.ok {
@@ -197,23 +267,18 @@ func main() {
 								alt := int16(binary.LittleEndian.Uint16(v.data[10:12]))
 								spd := float64(binary.LittleEndian.Uint16(v.data[12:14])) / 100.0
 								cog := float64(binary.LittleEndian.Uint16(v.data[14:16])) / 10.0
-								fmt.Printf("GPS: fix %d, sats %d,  %.6f° %.6f° %dm, spd %.1f cog %.0f", fix, nsat, lat, lon, alt, spd, cog)
+								s := fmt.Sprintf("fix %d, sats %d,  %.6f° %.6f° %dm, spd %.1f cog %.0f", fix, nsat, lat, lon, alt, spd, cog)
 								if len(v.data) > 16 {
 									hdop := float64(binary.LittleEndian.Uint16(v.data[16:18])) / 100.0
-									fmt.Printf("hdop %.1f", hdop)
+									s1 := fmt.Sprintf(" hdop %.1f", hdop)
+									s = s + s1
 								}
-							} else {
-								fmt.Printf("GPS: n/a")
+								set_value(IY_GPS, s, termbox.AttrBold)
 							}
-							termclrLF(ti)
 							dura := time.Since(start).Seconds()
 							rate := float64(nmsg) / dura
-							fmt.Printf("\r%d messages in %.3fs (%.1f m/s)", nmsg, dura, rate)
-							termclrLF(ti)
-							termUp(ti, upset)
-							if xonce {
-								return
-							}
+							rates = fmt.Sprintf("%d messages in %.3fs (%.1f m/s)", nmsg, dura, rate)
+							set_value(IY_RATE, rates, termbox.AttrBold)
 							if xsleep {
 								time.Sleep(time.Second * 1)
 							}
@@ -226,50 +291,15 @@ func main() {
 							serok = false
 							sp = nil
 						default:
-							fmt.Printf("Unexpected MSP %v %d\n", v.ok, v.cmd)
 						}
 					}
+					termbox.Flush()
 				}
 				time.Sleep(1 * time.Second)
 			}
 		}
 	}()
-	<-c
-	termout(ti)
-}
-
-func termUp(ti *terminfo.Terminfo, num int) {
-	buf := new(bytes.Buffer)
-	for j := 0; j < num; j++ {
-		ti.Fprintf(buf, terminfo.CursorUp)
-	}
-	os.Stdout.Write(buf.Bytes())
-}
-
-func termclrLF(ti *terminfo.Terminfo) {
-	buf := new(bytes.Buffer)
-	ti.Fprintf(buf, terminfo.ClrEol)
-	ti.Fprintf(buf, terminfo.Newline)
-	os.Stdout.Write(buf.Bytes())
-}
-
-func termout(ti *terminfo.Terminfo) {
-	buf := new(bytes.Buffer)
-	ti.Fprintf(buf, terminfo.CursorDown)
-	ti.Fprintf(buf, terminfo.CursorDown)
-	ti.Fprintf(buf, terminfo.CursorDown)
-	os.Stdout.Write(buf.Bytes())
-}
-
-func terminit(ti *terminfo.Terminfo) {
-	buf := new(bytes.Buffer)
-	ti.Fprintf(buf, terminfo.CursorInvisible)
-	os.Stdout.Write(buf.Bytes())
-}
-
-func termreset(ti *terminfo.Terminfo) {
-	buf := new(bytes.Buffer)
-	ti.Fprintf(buf, terminfo.CursorNormal)
-	os.Stdout.Write(buf.Bytes())
-	fmt.Println("\n\n")
+	<-done
+	termbox.Close()
+	fmt.Println(rates)
 }
