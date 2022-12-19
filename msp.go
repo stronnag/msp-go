@@ -2,9 +2,7 @@ package main
 
 import (
 	"encoding/binary"
-	"fmt"
 	"go.bug.st/serial"
-	"os"
 )
 
 const (
@@ -160,7 +158,7 @@ func (p *MSPSerial) Reader(c0 chan SChan) {
 				case state_X_CHECKSUM:
 					ccrc := inp[i]
 					if crc != ccrc {
-						fmt.Fprintf(os.Stderr, "CRC error on %d\n", sc.cmd)
+						//						fmt.Fprintf(os.Stderr, "CRC error on %d\n", sc.cmd)
 						sc.ok = false
 					} else {
 						sc.ok = dirnok
@@ -192,7 +190,7 @@ func (p *MSPSerial) Reader(c0 chan SChan) {
 				case state_CRC:
 					ccrc := inp[i]
 					if crc != ccrc {
-						fmt.Fprintf(os.Stderr, "CRC error on %d\n", sc.cmd)
+						//						fmt.Fprintf(os.Stderr, "CRC error on %d\n", sc.cmd)
 						sc.ok = false
 					} else {
 						sc.ok = dirnok
@@ -203,15 +201,14 @@ func (p *MSPSerial) Reader(c0 chan SChan) {
 			}
 		} else {
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "\n\n\n\nRead error: %s\n", err)
+				//				fmt.Fprintf(os.Stderr, "\n\n\n\nRead error: %s\n", err)
 			}
-			fmt.Fprintf(os.Stderr, "Closing Serial\n")
 			done = true
 		}
 	}
 	sc.cmd = Msp_FAIL
 	c0 <- sc
-	fmt.Fprintf(os.Stderr, "Stopping goroutine\n")
+	p.Close()
 }
 
 func encode_msp2(cmd uint16, payload []byte) []byte {
@@ -259,6 +256,10 @@ func encode_msp(cmd uint16, payload []byte) []byte {
 	return buf
 }
 
+func (p *MSPSerial) Close() error {
+	return p.SerDev.Close()
+}
+
 func (p *MSPSerial) MSPCommand(cmd uint16) {
 	var rb []byte
 	if p.v2 {
@@ -278,15 +279,9 @@ func NewMSPSerial(dname string, c0 chan SChan, v2 bool) (*MSPSerial, error) {
 	if err == nil {
 		p.ResetInputBuffer()
 		m := &MSPSerial{p, v2}
-
 		go m.Reader(c0)
 		return m, nil
 	} else {
 		return nil, err
 	}
-}
-
-func (m *MSPSerial) Close() error {
-	m.Close()
-	return nil
 }
