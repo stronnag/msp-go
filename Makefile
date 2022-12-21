@@ -9,6 +9,10 @@ $(APP):	$(wildcard *.go) go.sum
 go.sum: go.mod
 	go mod tidy
 
+
+windows:
+	GOOS=windows go build -ldflags "-w -s"
+
 clean:
 	go clean
 
