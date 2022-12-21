@@ -8,6 +8,7 @@ import (
 	"go.bug.st/serial/enumerator"
 	"log"
 	"os"
+	"strings"
 	"time"
 )
 
@@ -347,12 +348,12 @@ func arm_status(status uint32) string {
 	if status == 0 {
 		return "Ready to arm"
 	} else {
-		s := ""
+		var sarry []string
 		for i := 0; i < len(armfails); i++ {
 			if ((status & (1 << i)) != 0) && armfails[i] != "" {
-				s = s + armfails[i] + " "
+				sarry = append(sarry, armfails[i])
 			}
 		}
-		return s
+		return strings.Join(sarry, " ")
 	}
 }
