@@ -354,6 +354,7 @@ func arm_status(status uint32) string {
 				sarry = append(sarry, armfails[i])
 			}
 		}
+		sarry = append(sarry, fmt.Sprintf("(0x%x)", status))
 		return strings.Join(sarry, " ")
 	}
 }
