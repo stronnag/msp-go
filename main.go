@@ -206,7 +206,7 @@ func main() {
 							sp.MSPCommand(Msp_API_VERSION)
 						case Msp_API_VERSION:
 							if v.ok && v.len > 2 {
-								txt := fmt.Sprintf("%d.%d", v.data[1], v.data[2])
+								txt := fmt.Sprintf("%d.%d (%d)", v.data[1], v.data[2], mspvers)
 								set_value(s, IY_APIV, txt, bold)
 							}
 							sp.MSPCommand(Msp_FC_VARIANT)
@@ -244,7 +244,7 @@ func main() {
 								wp_max := v.data[1]
 								wp_valid := v.data[2]
 								wp_count := v.data[3]
-								txt := fmt.Sprintf("%d of %d, valid %d", wp_count, wp_max, wp_valid)
+								txt := fmt.Sprintf("%d of %d, valid %v", wp_count, wp_max, (wp_valid != 0))
 								set_value(s, IY_WPINFO, txt, bold)
 							}
 							if mspvers == 2 {
@@ -301,13 +301,13 @@ func main() {
 								txt := fmt.Sprintf("fix %d, sats %d,  %.6f° %.6f° %dm, %.0fm/s %.0f°", fix, nsat, lat, lon, alt, spd, cog)
 								if len(v.data) > 16 {
 									hdop := float64(binary.LittleEndian.Uint16(v.data[16:18])) / 100.0
-									txt = txt + fmt.Sprintf(" hdop %.1f", hdop)
+									txt = txt + fmt.Sprintf(" hdop %.2f", hdop)
 								}
 								set_value(s, IY_GPS, txt, bold)
 							}
 							dura := time.Since(start).Seconds()
 							rate := float64(nmsg) / dura
-							rates = fmt.Sprintf("%d messages in %.3fs (%.1f m/s)", nmsg, dura, rate)
+							rates = fmt.Sprintf("%d messages in %.2fs (%.1f/s)", nmsg, dura, rate)
 							set_value(s, IY_RATE, rates, bold)
 							if xsleep {
 								time.Sleep(time.Second * 1)
