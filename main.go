@@ -4,12 +4,12 @@ import (
 	"encoding/binary"
 	"flag"
 	"fmt"
-	"github.com/gdamore/tcell/v2"
-	"go.bug.st/serial/enumerator"
-	"log"
 	"os"
 	"strings"
 	"time"
+
+	"github.com/gdamore/tcell/v2"
+	"go.bug.st/serial/enumerator"
 )
 
 type SChan struct {
@@ -90,22 +90,21 @@ func set_no_value(s tcell.Screen, id int) {
 	set_value(s, id, "---", tcell.StyleDefault.Dim(true))
 }
 
-func enumerate_ports() string {
+func enumerate_ports() (string, error) {
 	ports, err := enumerator.GetDetailedPortsList()
-	if err != nil {
-		log.Fatal(err)
-	}
-	for _, port := range ports {
-		if port.Name != "" {
-			if port.IsUSB {
-				if port.VID == "0483" && port.PID == "5740" ||
-					port.VID == "0403" && port.PID == "6001" {
-					return port.Name
+	if err == nil {
+		for _, port := range ports {
+			if port.Name != "" {
+				if port.IsUSB {
+					if port.VID == "0483" && port.PID == "5740" ||
+						port.VID == "0403" && port.PID == "6001" {
+						return port.Name, nil
+					}
 				}
 			}
 		}
 	}
-	return ""
+	return "", err
 }
 
 func main() {
@@ -136,9 +135,11 @@ func main() {
 		os.Exit(1)
 	}
 
-	if e := s.Init(); e != nil {
-		fmt.Fprintf(os.Stderr, "%v\n", e)
+	if err = s.Init(); err != nil {
+		fmt.Fprintf(os.Stderr, "init %v\n", err)
 		os.Exit(1)
+	} else {
+
 	}
 
 	defstyle = tcell.StyleDefault.Background(tcell.ColorReset).Foreground(tcell.ColorReset)
@@ -147,13 +148,13 @@ func main() {
 
 	show_prompts(s)
 	s.Show()
-	done := make(chan struct{})
+	done := make(chan string)
 	go func() {
 		for {
 			switch ev := s.PollEvent().(type) {
 			case *tcell.EventKey:
 				if ev.Rune() == rune('q') || ev.Key() == tcell.KeyCtrlC {
-					done <- struct{}{}
+					done <- ""
 				}
 			}
 		}
@@ -172,12 +173,13 @@ func main() {
 	go func() {
 		for {
 			portnam := ""
+			var err error = nil
 			if devnam == "auto" {
-				portnam = enumerate_ports()
+				portnam, err = enumerate_ports()
 			} else {
 				portnam = devnam
 			}
-			if portnam != "" {
+			if err == nil {
 				sp, err = NewMSPSerial(portnam, c0, (mspvers == 2))
 				if err == nil {
 					set_value(s, IY_PORT, portnam, bold)
@@ -328,12 +330,18 @@ func main() {
 					s.Show()
 				}
 				time.Sleep(1 * time.Second)
+			} else {
+				done <- fmt.Sprintf("%v", err)
 			}
 		}
 	}()
-	<-done
+	ecode := <-done
 	s.Fini()
-	fmt.Println(rates)
+	if ecode == "" {
+		fmt.Println(rates)
+	} else {
+		fmt.Println(ecode)
+	}
 }
 
 func arm_status(status uint32) string {
