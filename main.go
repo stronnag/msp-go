@@ -19,6 +19,8 @@ type SChan struct {
 	data []byte
 }
 
+const VERSION = "v0.9.0"
+
 const (
 	IY_PORT = 4 + iota
 	IY_MW
@@ -70,8 +72,12 @@ func drawText(s tcell.Screen, x, y int, style tcell.Style, text string) {
 }
 
 func show_prompts(s tcell.Screen) {
-	drawText(s, 32, 2, tcell.StyleDefault.Reverse(true).Bold(true), "MSP Simple View")
-	drawText(s, 0, height-1, defstyle, "Ctrl-C or q to exit")
+	xp := (width - len("MSP Simple View")) / 2
+	drawText(s, xp, 1, tcell.StyleDefault.Reverse(true).Bold(true), "MSP Simple View")
+	o, a := get_os_info()
+	str := fmt.Sprintf("%s %s %s", VERSION, o, a)
+	xp = (width - len(str)) / 2
+	drawText(s, xp, 2, defstyle, str)
 	for _, u := range uiset {
 		drawText(s, 0, u.y, defstyle, u.prompt)
 		s.SetContent(8, u.y, rune(':'), nil, defstyle)

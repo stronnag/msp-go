@@ -4,6 +4,7 @@ go 1.17
 
 require (
 	github.com/gdamore/tcell/v2 v2.5.3
+	github.com/go-ini/ini v1.67.0
 	go.bug.st/serial v1.4.1
 )
 
