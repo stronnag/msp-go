@@ -15,7 +15,7 @@ import (
 type SChan struct {
 	len  uint16
 	cmd  uint16
-	ok   bool
+	ok   uint8
 	data []byte
 }
 
@@ -78,6 +78,7 @@ func show_prompts(s tcell.Screen) {
 	str := fmt.Sprintf("%s %s %s", VERSION, o, a)
 	xp = (width - len(str)) / 2
 	drawText(s, xp, 2, defstyle, str)
+	drawText(s, 0, height-1, defstyle, "Ctrl-C or 'q' to quit")
 	for _, u := range uiset {
 		drawText(s, 0, u.y, defstyle, u.prompt)
 		s.SetContent(8, u.y, rune(':'), nil, defstyle)
@@ -195,49 +196,53 @@ func main() {
 				} else {
 					serok = false
 				}
+				var tmsg time.Time
+				ticker := time.NewTicker(1 * time.Second)
+				nxt := uint16(0)
 				for serok {
 					select {
 					case v := <-c0:
 						nmsg += 1
+						tmsg = time.Now()
 						switch v.cmd {
 						case Msp_IDENT:
 							start = time.Now()
-							if v.ok {
+							if v.ok == sMSP_OK {
 								txt := fmt.Sprintf("MW Compat: %d, (msp protocol v%d)", v.data[0], mspvers)
 								set_value(s, IY_MW, txt, bold)
 							}
-							sp.MSPCommand(Msp_NAME)
+							nxt = Msp_NAME
 						case Msp_NAME:
-							if v.ok && v.len > 0 {
+							if v.ok == sMSP_OK && v.len > 0 {
 								set_value(s, IY_NAME, string(v.data), bold)
 							}
-							sp.MSPCommand(Msp_API_VERSION)
+							nxt = Msp_API_VERSION
 						case Msp_API_VERSION:
-							if v.ok && v.len > 2 {
+							if v.ok == sMSP_OK && v.len > 2 {
 								txt := fmt.Sprintf("%d.%d (%d)", v.data[1], v.data[2], mspvers)
 								set_value(s, IY_APIV, txt, bold)
 							}
-							sp.MSPCommand(Msp_FC_VARIANT)
+							nxt = Msp_FC_VARIANT
 						case Msp_FC_VARIANT:
-							if v.ok {
+							if v.ok == sMSP_OK {
 								set_value(s, IY_FC, string(v.data[0:4]), bold)
 							}
-							sp.MSPCommand(Msp_FC_VERSION)
+							nxt = Msp_FC_VERSION
 						case Msp_FC_VERSION:
-							if v.ok {
+							if v.ok == sMSP_OK {
 								txt := fmt.Sprintf("%d.%d.%d", v.data[0], v.data[1], v.data[2])
 								set_value(s, IY_FCVERS, txt, bold)
 							}
-							sp.MSPCommand(Msp_BUILD_INFO)
+							nxt = Msp_BUILD_INFO
 						case Msp_BUILD_INFO:
-							if v.ok {
+							if v.ok == sMSP_OK {
 								txt := fmt.Sprintf("%s %s (%s)", string(v.data[0:11]),
 									string(v.data[11:19]), string(v.data[19:]))
 								set_value(s, IY_BUILD, txt, bold)
 							}
-							sp.MSPCommand(Msp_BOARD_INFO)
+							nxt = Msp_BOARD_INFO
 						case Msp_BOARD_INFO:
-							if v.ok {
+							if v.ok == sMSP_OK {
 								var board string
 								if v.len > 8 {
 									board = string(v.data[9:])
@@ -246,9 +251,9 @@ func main() {
 								}
 								set_value(s, IY_BOARD, board, bold)
 							}
-							sp.MSPCommand(Msp_WP_GETINFO)
+							nxt = Msp_WP_GETINFO
 						case Msp_WP_GETINFO:
-							if v.ok {
+							if v.ok == sMSP_OK {
 								wp_max := v.data[1]
 								wp_valid := v.data[2]
 								wp_count := v.data[3]
@@ -256,49 +261,49 @@ func main() {
 								set_value(s, IY_WPINFO, txt, bold)
 							}
 							if mspvers == 2 {
-								sp.MSPCommand(Msp_MISC2)
+								nxt = Msp_MISC2
 							} else {
-								sp.MSPCommand(Msp_ANALOG)
+								nxt = Msp_ANALOG
 							}
 						case Msp_MISC2:
-							if v.ok {
+							if v.ok == sMSP_OK {
 								uptime := binary.LittleEndian.Uint32(v.data[0:4])
 								txt := fmt.Sprintf("%ds", uptime)
 								set_value(s, IY_UPTIME, txt, bold)
 							}
-							sp.MSPCommand(Msp_ANALOG)
+							nxt = Msp_ANALOG
 						case Msp_ANALOG:
-							if v.ok {
+							if v.ok == sMSP_OK {
 								volts := float64(v.data[0]) / 10.0
 								amps := float64(binary.LittleEndian.Uint16(v.data[5:7])) / 100.0
 								txt := fmt.Sprintf("volts: %.1f, amps: %.2f", volts, amps)
 								set_value(s, IY_ANALOG, txt, bold)
 							}
 							if mspvers == 2 {
-								sp.MSPCommand(Msp_INAV_STATUS)
+								nxt = Msp_INAV_STATUS
 							} else {
-								sp.MSPCommand(Msp_STATUS_EX)
+								nxt = Msp_STATUS_EX
 							}
 
 						case Msp_INAV_STATUS:
-							if v.ok {
+							if v.ok == sMSP_OK {
 								armf := binary.LittleEndian.Uint32(v.data[9:13])
 								txt := arm_status(armf)
 								set_value(s, IY_ARM, txt, bold)
-								sp.MSPCommand(Msp_RAW_GPS)
+								nxt = Msp_RAW_GPS
 							} else {
-								sp.MSPCommand(Msp_STATUS_EX)
+								nxt = Msp_STATUS_EX
 							}
 						case Msp_STATUS_EX:
-							if v.ok {
+							if v.ok == sMSP_OK {
 								armf := binary.LittleEndian.Uint16(v.data[13:15])
 								txt := arm_status(uint32(armf))
 								set_value(s, IY_ARM, txt, bold)
 							}
-							sp.MSPCommand(Msp_RAW_GPS)
+							nxt = Msp_RAW_GPS
 
 						case Msp_RAW_GPS:
-							if v.ok {
+							if v.ok == sMSP_OK {
 								fix := v.data[0]
 								nsat := v.data[1]
 								lat := float64(int32(binary.LittleEndian.Uint32(v.data[2:6]))) / 1e7
@@ -321,26 +326,37 @@ func main() {
 								time.Sleep(time.Second * 1)
 							}
 							if mspvers == 2 {
-								sp.MSPCommand(Msp_MISC2)
+								nxt = Msp_MISC2
 							} else {
-								sp.MSPCommand(Msp_ANALOG)
+								nxt = Msp_ANALOG
 							}
-						case Msp_FAIL:
+						default:
 							serok = false
 							sp = nil
+							nxt = Msp_IDENT
 							s.Clear()
 							show_prompts(s)
-						default:
+							if v.ok != sMSP_OK {
+								if v.len > 0 {
+									drawText(s, 0, height-2, defstyle, string(v.data))
+								}
+							}
 						}
-					}
-					s.Show()
-				}
+						s.Show()
+						sp.MSPCommand(nxt)
+					case t := <-ticker.C:
+						if t.Sub(tmsg) > 2*time.Second {
+							str := fmt.Sprintf("Timeout on %d", nxt)
+							drawText(s, 0, height-2, defstyle, str)
+						}
+					} // select
+				} // serok
 				time.Sleep(1 * time.Second)
 			} else {
 				done <- fmt.Sprintf("%v", err)
-			}
-		}
-	}()
+			} // err
+		} // outer
+	}() // func
 	ecode := <-done
 	s.Fini()
 	if ecode == "" {

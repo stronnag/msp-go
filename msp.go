@@ -2,7 +2,18 @@ package main
 
 import (
 	"encoding/binary"
+	"fmt"
 	"go.bug.st/serial"
+	//	"time"
+)
+
+const (
+	sMSP_UNK = iota
+	sMSP_OK
+	sMSP_DIRN
+	sMSP_CRC
+	sMSP_TIMEOUT
+	sMSP_FAIL
 )
 
 const (
@@ -21,7 +32,6 @@ const (
 	Msp_STATUS_EX   uint16 = 150
 	Msp_INAV_STATUS uint16 = 0x2000
 	Msp_MISC2       uint16 = 0x203a
-	Msp_FAIL        uint16 = 0xffff
 )
 
 const (
@@ -67,24 +77,22 @@ func crc8_dvb_s2(crc byte, a byte) byte {
 }
 
 func (p *MSPSerial) Reader(c0 chan SChan) {
-	inp := make([]byte, 128)
+	inp := make([]byte, 256)
 	var count = uint16(0)
 	var crc = byte(0)
 	var sc SChan
-	dirnok := false
 	done := false
 
 	n := state_INIT
 	for !done {
 		nb, err := p.Read(inp)
-		if err == nil && nb > 0 {
+		if err == nil {
 			for i := 0; i < nb; i++ {
 				switch n {
 				case state_INIT:
 					if inp[i] == '$' {
 						n = state_M
-						sc.ok = false
-						dirnok = false
+						sc.ok = sMSP_UNK
 						sc.len = 0
 						sc.cmd = 0
 					}
@@ -99,10 +107,10 @@ func (p *MSPSerial) Reader(c0 chan SChan) {
 				case state_DIRN:
 					if inp[i] == '!' {
 						n = state_LEN
+						sc.ok = sMSP_DIRN
 					} else if inp[i] == '>' {
 						n = state_LEN
-						sc.ok = true
-						dirnok = true
+						sc.ok = sMSP_OK
 					} else {
 						n = state_INIT
 					}
@@ -110,10 +118,10 @@ func (p *MSPSerial) Reader(c0 chan SChan) {
 				case state_X_HEADER2:
 					if inp[i] == '!' {
 						n = state_X_FLAGS
+						sc.ok = sMSP_DIRN
 					} else if inp[i] == '>' {
 						n = state_X_FLAGS
-						sc.ok = true
-						dirnok = true
+						sc.ok = sMSP_OK
 					} else {
 						n = state_INIT
 					}
@@ -158,10 +166,7 @@ func (p *MSPSerial) Reader(c0 chan SChan) {
 				case state_X_CHECKSUM:
 					ccrc := inp[i]
 					if crc != ccrc {
-						//						fmt.Fprintf(os.Stderr, "CRC error on %d\n", sc.cmd)
-						sc.ok = false
-					} else {
-						sc.ok = dirnok
+						sc.ok = sMSP_CRC
 					}
 					c0 <- sc
 					n = state_INIT
@@ -190,10 +195,7 @@ func (p *MSPSerial) Reader(c0 chan SChan) {
 				case state_CRC:
 					ccrc := inp[i]
 					if crc != ccrc {
-						//						fmt.Fprintf(os.Stderr, "CRC error on %d\n", sc.cmd)
-						sc.ok = false
-					} else {
-						sc.ok = dirnok
+						sc.ok = sMSP_CRC
 					}
 					c0 <- sc
 					n = state_INIT
@@ -201,12 +203,15 @@ func (p *MSPSerial) Reader(c0 chan SChan) {
 			}
 		} else {
 			if err != nil {
-				//				fmt.Fprintf(os.Stderr, "\n\n\n\nRead error: %s\n", err)
+				sc.data = []byte(fmt.Sprintf("%v", err))
+				sc.len = uint16(len(sc.data))
 			}
+			sc.cmd = 0
 			done = true
 		}
 	}
-	sc.cmd = Msp_FAIL
+	sc.cmd = 0
+	sc.ok = sMSP_FAIL
 	c0 <- sc
 	p.Close()
 }
@@ -265,12 +270,12 @@ func (p *MSPSerial) MSPCommand(cmd uint16) {
 	if p.v2 {
 		rb = encode_msp2(cmd, nil)
 	} else {
-		rb = encode_msp2(cmd, nil)
+		rb = encode_msp(cmd, nil)
 	}
 	p.Write(rb)
 }
 
-func NewMSPSerial(dname string, c0 chan SChan, v2 bool) (*MSPSerial, error) {
+func NewMSPSerial(dname string, c0 chan SChan, v2_ bool) (*MSPSerial, error) {
 	mode := &serial.Mode{
 		BaudRate: 115200,
 	}
@@ -278,7 +283,7 @@ func NewMSPSerial(dname string, c0 chan SChan, v2 bool) (*MSPSerial, error) {
 
 	if err == nil {
 		p.ResetInputBuffer()
-		m := &MSPSerial{p, v2}
+		m := &MSPSerial{p, v2_}
 		go m.Reader(c0)
 		return m, nil
 	} else {
