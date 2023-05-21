@@ -3,8 +3,23 @@ package main
 import (
 	"encoding/binary"
 	"fmt"
+
+	"errors"
 	"go.bug.st/serial"
+
 	//	"time"
+	"net"
+	"net/url"
+	"strconv"
+	"strings"
+)
+
+const (
+	DevClass_NONE = iota
+	DevClass_SERIAL
+	DevClass_TCP
+	DevClass_UDP
+	DevClass_BT
 )
 
 const (
@@ -52,6 +67,14 @@ const (
 	state_X_DATA
 	state_X_CHECKSUM
 )
+
+type DevDescription struct {
+	klass  int
+	name   string
+	param  int
+	name1  string
+	param1 int
+}
 
 type SerDev interface {
 	Read(buf []byte) (int, error)
@@ -275,14 +298,91 @@ func (p *MSPSerial) MSPCommand(cmd uint16) {
 	p.Write(rb)
 }
 
-func NewMSPSerial(dname string, c0 chan SChan, v2_ bool) (*MSPSerial, error) {
-	mode := &serial.Mode{
-		BaudRate: 115200,
+func splithost(uhost string) (string, int) {
+	port := -1
+	host := ""
+	if uhost != "" {
+		if h, p, err := net.SplitHostPort(uhost); err != nil {
+			host = uhost
+		} else {
+			host = h
+			port, _ = strconv.Atoi(p)
+		}
 	}
-	p, err := serial.Open(dname, mode)
+	return host, port
+}
+
+func parse_device(devstr string) DevDescription {
+	dd := DevDescription{name: "", klass: DevClass_NONE}
+	if devstr == "" {
+		return dd
+	}
+
+	if len(devstr) == 17 && (devstr)[2] == ':' && (devstr)[8] == ':' && (devstr)[14] == ':' {
+		dd.name = devstr
+		dd.klass = DevClass_BT
+	} else {
+		u, err := url.Parse(devstr)
+		if err == nil {
+			if u.Scheme == "tcp" {
+				dd.klass = DevClass_TCP
+			} else if u.Scheme == "udp" {
+				dd.klass = DevClass_UDP
+			}
+
+			if u.Scheme == "" {
+				ss := strings.Split(u.Path, "@")
+				dd.klass = DevClass_SERIAL
+				dd.name = ss[0]
+				if len(ss) > 1 {
+					dd.param, _ = strconv.Atoi(ss[1])
+				} else {
+					dd.param = 115200
+				}
+			} else {
+				if u.RawQuery != "" {
+					m, err := url.ParseQuery(u.RawQuery)
+					if err == nil {
+						if p, ok := m["bind"]; ok {
+							dd.param, _ = strconv.Atoi(p[0])
+						}
+						dd.name1, dd.param1 = splithost(u.Host)
+					}
+				} else {
+					if u.Path != "" {
+						parts := strings.Split(u.Path, ":")
+						if len(parts) == 2 {
+							dd.name1 = parts[0][1:]
+							dd.param1, _ = strconv.Atoi(parts[1])
+						}
+					}
+					dd.name, dd.param = splithost(u.Host)
+				}
+			}
+		}
+	}
+	return dd
+}
+
+func NewMSPSerial(dname string, c0 chan SChan, v2_ bool) (*MSPSerial, error) {
+	dd := parse_device(dname)
+	var p SerDev
+	var err error
+	switch dd.klass {
+	case DevClass_SERIAL:
+		p, err = serial.Open(dname, &serial.Mode{BaudRate: dd.param})
+	case DevClass_TCP:
+		var addr *net.TCPAddr
+		remote := fmt.Sprintf("%s:%d", dd.name, dd.param)
+		addr, err = net.ResolveTCPAddr("tcp", remote)
+		if err == nil {
+			p, err = net.DialTCP("tcp", nil, addr)
+		}
+	default:
+		err = errors.New("unavailable device")
+	}
 
 	if err == nil {
-		p.ResetInputBuffer()
 		m := &MSPSerial{p, v2_}
 		go m.Reader(c0)
 		return m, nil
