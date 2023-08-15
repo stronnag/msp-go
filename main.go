@@ -36,6 +36,7 @@ const (
 	IY_GPS
 	IY_ARM
 	IY_RATE
+	IY_DEBUG
 )
 
 var uiset = []struct {
@@ -56,6 +57,7 @@ var uiset = []struct {
 	{IY_GPS, "GPS"},
 	{IY_ARM, "Arming"},
 	{IY_RATE, "Rate"},
+	{IY_DEBUG, "Debug"},
 }
 
 var (
@@ -330,6 +332,11 @@ func main() {
 							} else {
 								nxt = Msp_ANALOG
 							}
+
+						case Msp_DEBUG:
+							ds := strings.Trim(string(v.data), "\x00\t\r\n ")
+							set_value(s, IY_DEBUG, ds, bold)
+							nxt = 0
 						default:
 							serok = false
 							sp = nil
@@ -343,7 +350,9 @@ func main() {
 							}
 						}
 						s.Show()
-						sp.MSPCommand(nxt)
+						if nxt != 0 {
+							sp.MSPCommand(nxt)
+						}
 					case t := <-ticker.C:
 						if t.Sub(tmsg) > 2*time.Second {
 							str := fmt.Sprintf("Timeout on %d", nxt)
