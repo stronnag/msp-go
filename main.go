@@ -99,6 +99,12 @@ func set_no_value(s tcell.Screen, id int) {
 	set_value(s, id, "---", tcell.StyleDefault.Dim(true))
 }
 
+func clear_err(s tcell.Screen) {
+	for j := 0; j < width; j++ {
+		s.SetContent(j, height-2, rune(' '), nil, defstyle)
+	}
+}
+
 func enumerate_ports() (string, error) {
 	ports, err := enumerator.GetDetailedPortsList()
 	if err == nil {
@@ -191,6 +197,7 @@ func main() {
 			if err == nil {
 				sp, err = NewMSPSerial(portnam, c0, (mspvers == 2))
 				if err == nil {
+					clear_err(s)
 					set_value(s, IY_PORT, portnam, bold)
 					nmsg = 0
 					serok = true
@@ -340,7 +347,7 @@ func main() {
 						default:
 							serok = false
 							sp = nil
-							nxt = Msp_IDENT
+							nxt = 0
 							s.Clear()
 							show_prompts(s)
 							if v.ok != sMSP_OK {
@@ -376,24 +383,38 @@ func main() {
 }
 
 func arm_status(status uint32) string {
-	armfails := [...]string{"", "", "Armed", "", "", "", "",
-		"F/S", "Level", "Calibrate", "Overload",
+	armfails := [...]string{
+		"",           /*      1 */
+		"",           /*      2 */
+		"Armed",      /*      4 */
+		"Ever armed", /*      8 */
+		"",           /*     10 */ // HITL
+		"",           /*     20 */ // SITL
+		"",           /*     40 */
+		"F/S",        /*     80 */
+		"Level",      /*    100 */
+		"Calibrate",  /*    200 */
+		"Overload",   /*    400 */
 		"NavUnsafe", "MagCal", "AccCal", "ArmSwitch", "H/WFail",
 		"BoxF/S", "BoxKill", "RCLink", "Throttle", "CLI",
 		"CMS", "OSD", "Roll/Pitch", "Autotrim", "OOM",
 		"Settings", "PWM Out", "PreArm", "DSHOTBeep", "Land", "Other",
 	}
 
-	if status == 0 {
-		return "Ready to arm"
+	var sarry []string
+	if status < 0x80 {
+		if status&(1<<2) != 0 {
+			sarry = append(sarry, armfails[2])
+		} else {
+			sarry = append(sarry, "Ready to arm")
+		}
 	} else {
-		var sarry []string
 		for i := 0; i < len(armfails); i++ {
 			if ((status & (1 << i)) != 0) && armfails[i] != "" {
 				sarry = append(sarry, armfails[i])
 			}
 		}
-		sarry = append(sarry, fmt.Sprintf("(0x%x)", status))
-		return strings.Join(sarry, " ")
 	}
+	sarry = append(sarry, fmt.Sprintf("(0x%x)", status))
+	return strings.Join(sarry, " ")
 }
