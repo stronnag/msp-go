@@ -395,10 +395,27 @@ func arm_status(status uint32) string {
 		"Level",      /*    100 */
 		"Calibrate",  /*    200 */
 		"Overload",   /*    400 */
-		"NavUnsafe", "MagCal", "AccCal", "ArmSwitch", "H/WFail",
-		"BoxF/S", "BoxKill", "RCLink", "Throttle", "CLI",
-		"CMS", "OSD", "Roll/Pitch", "Autotrim", "OOM",
-		"Settings", "PWM Out", "PreArm", "DSHOTBeep", "Land", "Other",
+		"NavUnsafe",
+		"MagCal",
+		"AccCal",
+		"ArmSwitch",
+		"H/WFail",
+		"BoxF/S",
+		"BoxKill",
+		"RCLink",
+		"Throttle", // 19
+		"CLI",
+		"CMS",
+		"OSD",
+		"Roll/Pitch",
+		"Autotrim",
+		"OOM",
+		"Settings", // 26
+		"PWM Out",
+		"PreArm",
+		"DSHOTBeep",
+		"Land",
+		"Other",
 	}
 
 	var sarry []string

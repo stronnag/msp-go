@@ -378,6 +378,12 @@ func NewMSPSerial(dname string, c0 chan SChan, v2_ bool) (*MSPSerial, error) {
 		if err == nil {
 			p, err = net.DialTCP("tcp", nil, addr)
 		}
+	case DevClass_UDP:
+		var addr *net.UDPAddr
+		addr, err = net.ResolveUDPAddr("udp", fmt.Sprintf("%s:%d", dd.name, dd.param))
+		if err == nil {
+			p, err = net.DialUDP("udp", nil, addr)
+		}
 	default:
 		err = errors.New("unavailable device")
 	}
