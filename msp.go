@@ -5,7 +5,7 @@ import (
 	"fmt"
 
 	"errors"
-	"go.bug.st/serial"
+	"github.com/albenik/go-serial/v2"
 
 	//	"time"
 	"net"
@@ -370,7 +370,7 @@ func NewMSPSerial(dname string, c0 chan SChan, v2_ bool) (*MSPSerial, error) {
 	var err error
 	switch dd.klass {
 	case DevClass_SERIAL:
-		p, err = serial.Open(dname, &serial.Mode{BaudRate: dd.param})
+		p, err = serial.Open(dname, serial.WithBaudrate(dd.param))
 	case DevClass_TCP:
 		var addr *net.TCPAddr
 		remote := fmt.Sprintf("%s:%d", dd.name, dd.param)

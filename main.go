@@ -4,12 +4,13 @@ import (
 	"encoding/binary"
 	"flag"
 	"fmt"
+	"github.com/albenik/go-serial/enumerator"
 	"os"
+	"runtime"
 	"strings"
 	"time"
 
 	"github.com/gdamore/tcell/v2"
-	"go.bug.st/serial/enumerator"
 )
 
 type SChan struct {
@@ -19,7 +20,7 @@ type SChan struct {
 	data []byte
 }
 
-const VERSION = "v0.9.0"
+const VERSION = "v0.10.0"
 
 const (
 	IY_PORT = 4 + iota
@@ -105,6 +106,33 @@ func clear_err(s tcell.Screen) {
 	}
 }
 
+func list_ports() []string {
+	sl := make([]string, 0)
+	ports, err := enumerator.GetDetailedPortsList()
+	if err == nil {
+		for _, port := range ports {
+			if port.Name != "" {
+				if port.IsUSB {
+					if port.VID == "0483" && port.PID == "5740" ||
+						port.VID == "0403" && port.PID == "6001" {
+						sl = append(sl, port.Name)
+					}
+				}
+			}
+		}
+	} else {
+		if runtime.GOOS == "freebsd" {
+			for j := 0; j < 10; j++ {
+				name := fmt.Sprintf("/dev/cuaU%d", j)
+				if _, serr := os.Stat(name); serr == nil {
+					sl = append(sl, name)
+				}
+			}
+		}
+	}
+	return sl
+}
+
 func enumerate_ports() (string, error) {
 	ports, err := enumerator.GetDetailedPortsList()
 	if err == nil {
@@ -118,6 +146,15 @@ func enumerate_ports() (string, error) {
 				}
 			}
 		}
+	} else {
+		if runtime.GOOS == "freebsd" {
+			for j := 0; j < 10; j++ {
+				name := fmt.Sprintf("/dev/cuaU%d", j)
+				if _, serr := os.Stat(name); serr == nil {
+					return name, nil
+				}
+			}
+		}
 	}
 	return "", err
 }
@@ -126,6 +163,7 @@ func main() {
 	devnam := ""
 	xsleep := false
 	mspvers := 2
+	show := false
 
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, "Usage of mspview [options] device\n")
@@ -134,10 +172,18 @@ func main() {
 
 	flag.IntVar(&mspvers, "mspversion", 2, "MSP Version")
 	flag.BoolVar(&xsleep, "slow", false, "Slow mode")
+	flag.BoolVar(&show, "show-ports", false, "Enumerate ports")
 	flag.Parse()
 	files := flag.Args()
 	if len(files) > 0 {
 		devnam = files[0]
+	}
+
+	if show {
+		for _, s := range list_ports() {
+			fmt.Println(s)
+		}
+		os.Exit(1)
 	}
 
 	if devnam == "" {
