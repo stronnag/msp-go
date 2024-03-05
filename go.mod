@@ -1,6 +1,6 @@
 module mspview
 
-go 1.18.0
+go 1.18
 
 require (
 	github.com/albenik/go-serial/v2 v2.6.1
