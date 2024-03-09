@@ -7,11 +7,11 @@ import (
 	"errors"
 	"github.com/albenik/go-serial/v2"
 
-	//	"time"
 	"net"
 	"net/url"
 	"strconv"
 	"strings"
+	"time"
 )
 
 const (
@@ -110,118 +110,122 @@ func (p *MSPSerial) Reader(c0 chan SChan) {
 	for !done {
 		nb, err := p.Read(inp)
 		if err == nil {
-			for i := 0; i < nb; i++ {
-				switch n {
-				case state_INIT:
-					if inp[i] == '$' {
-						n = state_M
-						sc.ok = sMSP_UNK
-						sc.len = 0
-						sc.cmd = 0
-					}
-				case state_M:
-					if inp[i] == 'M' {
-						n = state_DIRN
-					} else if inp[i] == 'X' {
-						n = state_X_HEADER2
-					} else {
+			if nb == 0 {
+				time.Sleep(800 * time.Microsecond)
+			} else {
+				for i := 0; i < nb; i++ {
+					switch n {
+					case state_INIT:
+						if inp[i] == '$' {
+							n = state_M
+							sc.ok = sMSP_UNK
+							sc.len = 0
+							sc.cmd = 0
+						}
+					case state_M:
+						if inp[i] == 'M' {
+							n = state_DIRN
+						} else if inp[i] == 'X' {
+							n = state_X_HEADER2
+						} else {
+							n = state_INIT
+						}
+					case state_DIRN:
+						if inp[i] == '!' {
+							n = state_LEN
+							sc.ok = sMSP_DIRN
+						} else if inp[i] == '>' {
+							n = state_LEN
+							sc.ok = sMSP_OK
+						} else {
+							n = state_INIT
+						}
+
+					case state_X_HEADER2:
+						if inp[i] == '!' {
+							n = state_X_FLAGS
+							sc.ok = sMSP_DIRN
+						} else if inp[i] == '>' {
+							n = state_X_FLAGS
+							sc.ok = sMSP_OK
+						} else {
+							n = state_INIT
+						}
+
+					case state_X_FLAGS:
+						crc = crc8_dvb_s2(0, inp[i])
+						n = state_X_ID1
+
+					case state_X_ID1:
+						crc = crc8_dvb_s2(crc, inp[i])
+						sc.cmd = uint16(inp[i])
+						n = state_X_ID2
+
+					case state_X_ID2:
+						crc = crc8_dvb_s2(crc, inp[i])
+						sc.cmd |= (uint16(inp[i]) << 8)
+						n = state_X_LEN1
+
+					case state_X_LEN1:
+						crc = crc8_dvb_s2(crc, inp[i])
+						sc.len = uint16(inp[i])
+						n = state_X_LEN2
+
+					case state_X_LEN2:
+						crc = crc8_dvb_s2(crc, inp[i])
+						sc.len |= (uint16(inp[i]) << 8)
+						if sc.len > 0 {
+							n = state_X_DATA
+							count = 0
+							sc.data = make([]byte, sc.len)
+						} else {
+							n = state_X_CHECKSUM
+						}
+					case state_X_DATA:
+						crc = crc8_dvb_s2(crc, inp[i])
+						sc.data[count] = inp[i]
+						count++
+						if count == sc.len {
+							n = state_X_CHECKSUM
+						}
+
+					case state_X_CHECKSUM:
+						ccrc := inp[i]
+						if crc != ccrc {
+							sc.ok = sMSP_CRC
+						}
+						c0 <- sc
+						n = state_INIT
+
+					case state_LEN:
+						sc.len = uint16(inp[i])
+						crc = inp[i]
+						n = state_CMD
+					case state_CMD:
+						sc.cmd = uint16(inp[i])
+						crc ^= inp[i]
+						if sc.len == 0 {
+							n = state_CRC
+						} else {
+							sc.data = make([]byte, sc.len)
+							n = state_DATA
+							count = 0
+						}
+					case state_DATA:
+						sc.data[count] = inp[i]
+						crc ^= inp[i]
+						count++
+						if count == sc.len {
+							n = state_CRC
+						}
+					case state_CRC:
+						ccrc := inp[i]
+						if crc != ccrc {
+							sc.ok = sMSP_CRC
+						}
+						c0 <- sc
 						n = state_INIT
 					}
-				case state_DIRN:
-					if inp[i] == '!' {
-						n = state_LEN
-						sc.ok = sMSP_DIRN
-					} else if inp[i] == '>' {
-						n = state_LEN
-						sc.ok = sMSP_OK
-					} else {
-						n = state_INIT
-					}
-
-				case state_X_HEADER2:
-					if inp[i] == '!' {
-						n = state_X_FLAGS
-						sc.ok = sMSP_DIRN
-					} else if inp[i] == '>' {
-						n = state_X_FLAGS
-						sc.ok = sMSP_OK
-					} else {
-						n = state_INIT
-					}
-
-				case state_X_FLAGS:
-					crc = crc8_dvb_s2(0, inp[i])
-					n = state_X_ID1
-
-				case state_X_ID1:
-					crc = crc8_dvb_s2(crc, inp[i])
-					sc.cmd = uint16(inp[i])
-					n = state_X_ID2
-
-				case state_X_ID2:
-					crc = crc8_dvb_s2(crc, inp[i])
-					sc.cmd |= (uint16(inp[i]) << 8)
-					n = state_X_LEN1
-
-				case state_X_LEN1:
-					crc = crc8_dvb_s2(crc, inp[i])
-					sc.len = uint16(inp[i])
-					n = state_X_LEN2
-
-				case state_X_LEN2:
-					crc = crc8_dvb_s2(crc, inp[i])
-					sc.len |= (uint16(inp[i]) << 8)
-					if sc.len > 0 {
-						n = state_X_DATA
-						count = 0
-						sc.data = make([]byte, sc.len)
-					} else {
-						n = state_X_CHECKSUM
-					}
-				case state_X_DATA:
-					crc = crc8_dvb_s2(crc, inp[i])
-					sc.data[count] = inp[i]
-					count++
-					if count == sc.len {
-						n = state_X_CHECKSUM
-					}
-
-				case state_X_CHECKSUM:
-					ccrc := inp[i]
-					if crc != ccrc {
-						sc.ok = sMSP_CRC
-					}
-					c0 <- sc
-					n = state_INIT
-
-				case state_LEN:
-					sc.len = uint16(inp[i])
-					crc = inp[i]
-					n = state_CMD
-				case state_CMD:
-					sc.cmd = uint16(inp[i])
-					crc ^= inp[i]
-					if sc.len == 0 {
-						n = state_CRC
-					} else {
-						sc.data = make([]byte, sc.len)
-						n = state_DATA
-						count = 0
-					}
-				case state_DATA:
-					sc.data[count] = inp[i]
-					crc ^= inp[i]
-					count++
-					if count == sc.len {
-						n = state_CRC
-					}
-				case state_CRC:
-					ccrc := inp[i]
-					if crc != ccrc {
-						sc.ok = sMSP_CRC
-					}
-					c0 <- sc
-					n = state_INIT
 				}
 			}
 		} else {
