@@ -3,7 +3,7 @@ prefix ?= $$HOME/.local
 APP = mspview
 all: $(APP)
 
-$(APP):	$(wildcard *.go) go.sum
+$(APP):	main.go msp.go osinfo.go go.sum
 	-go build -ldflags "-w -s"
 
 go.sum: go.mod
