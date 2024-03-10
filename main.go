@@ -20,7 +20,7 @@ type SChan struct {
 	data []byte
 }
 
-const VERSION = "v0.10.0"
+const VERSION = "v0.11.0"
 
 const (
 	IY_PORT = 4 + iota
@@ -78,7 +78,7 @@ func show_prompts(s tcell.Screen) {
 	xp := (width - len("MSP Simple View")) / 2
 	drawText(s, xp, 1, tcell.StyleDefault.Reverse(true).Bold(true), "MSP Simple View")
 	o, a := get_os_info()
-	str := fmt.Sprintf("%s %s %s", VERSION, o, a)
+	str := fmt.Sprintf("%s %s %s (golang)", VERSION, o, a)
 	xp = (width - len(str)) / 2
 	drawText(s, xp, 2, defstyle, str)
 	drawText(s, 0, height-1, defstyle, "Ctrl-C or 'q' to quit")

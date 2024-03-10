@@ -84,7 +84,8 @@ type SerDev interface {
 
 type MSPSerial struct {
 	SerDev
-	v2 bool
+	v2     bool
+	stream bool
 }
 
 func crc8_dvb_s2(crc byte, a byte) byte {
@@ -105,13 +106,16 @@ func (p *MSPSerial) Reader(c0 chan SChan) {
 	var crc = byte(0)
 	var sc SChan
 	done := false
-
+	req := 1
 	n := state_INIT
 	for !done {
-		nb, err := p.Read(inp)
+		if !p.stream {
+			req = len(inp)
+		}
+		nb, err := p.Read(inp[:req])
 		if err == nil {
 			if nb == 0 {
-				time.Sleep(800 * time.Microsecond)
+				time.Sleep(100 * time.Microsecond)
 			} else {
 				for i := 0; i < nb; i++ {
 					switch n {
@@ -178,6 +182,7 @@ func (p *MSPSerial) Reader(c0 chan SChan) {
 							n = state_X_DATA
 							count = 0
 							sc.data = make([]byte, sc.len)
+							req = int(sc.len)
 						} else {
 							n = state_X_CHECKSUM
 						}
@@ -187,6 +192,7 @@ func (p *MSPSerial) Reader(c0 chan SChan) {
 						count++
 						if count == sc.len {
 							n = state_X_CHECKSUM
+							req = 1
 						}
 
 					case state_X_CHECKSUM:
@@ -210,6 +216,7 @@ func (p *MSPSerial) Reader(c0 chan SChan) {
 							sc.data = make([]byte, sc.len)
 							n = state_DATA
 							count = 0
+							req = int(sc.len)
 						}
 					case state_DATA:
 						sc.data[count] = inp[i]
@@ -217,6 +224,7 @@ func (p *MSPSerial) Reader(c0 chan SChan) {
 						count++
 						if count == sc.len {
 							n = state_CRC
+							req = 1
 						}
 					case state_CRC:
 						ccrc := inp[i]
@@ -372,9 +380,15 @@ func NewMSPSerial(dname string, c0 chan SChan, v2_ bool) (*MSPSerial, error) {
 	dd := parse_device(dname)
 	var p SerDev
 	var err error
+	stream_ := true
 	switch dd.klass {
 	case DevClass_SERIAL:
-		p, err = serial.Open(dname, serial.WithBaudrate(dd.param))
+		pt, perr := serial.Open(dname, serial.WithBaudrate(dd.param), serial.WithReadTimeout(1))
+		err = perr
+		if err == nil {
+			pt.SetFirstByteReadTimeout(100)
+			p = SerDev(pt)
+		}
 	case DevClass_TCP:
 		var addr *net.TCPAddr
 		remote := fmt.Sprintf("%s:%d", dd.name, dd.param)
@@ -387,13 +401,14 @@ func NewMSPSerial(dname string, c0 chan SChan, v2_ bool) (*MSPSerial, error) {
 		addr, err = net.ResolveUDPAddr("udp", fmt.Sprintf("%s:%d", dd.name, dd.param))
 		if err == nil {
 			p, err = net.DialUDP("udp", nil, addr)
+			stream_ = false
 		}
 	default:
 		err = errors.New("unavailable device")
 	}
 
 	if err == nil {
-		m := &MSPSerial{p, v2_}
+		m := &MSPSerial{p, v2_, stream_}
 		go m.Reader(c0)
 		return m, nil
 	} else {
