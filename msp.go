@@ -387,6 +387,8 @@ func NewMSPSerial(dname string, c0 chan SChan, v2_ bool) (*MSPSerial, error) {
 		err = perr
 		if err == nil {
 			pt.SetFirstByteReadTimeout(100)
+			pt.ResetInputBuffer()
+			pt.ResetOutputBuffer()
 			p = SerDev(pt)
 		}
 	case DevClass_TCP:
