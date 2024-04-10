@@ -307,6 +307,7 @@ func main() {
 								set_value(s, IY_BOARD, board, bold)
 							}
 							nxt = Msp_WP_GETINFO
+
 						case Msp_WP_GETINFO:
 							if v.ok == sMSP_OK {
 								wp_max := v.data[1]
@@ -320,17 +321,24 @@ func main() {
 							} else {
 								nxt = Msp_ANALOG
 							}
+
+						case Msp_ANALOG:
+							if v.ok == sMSP_OK {
+								volts := float64(v.data[0]) / 10.0
+								amps := float64(binary.LittleEndian.Uint16(v.data[5:7])) / 100.0
+								txt := fmt.Sprintf("volts: %.1f, amps: %.2f", volts, amps)
+								set_value(s, IY_ANALOG, txt, bold)
+							}
+							nxt = Msp_STATUS_EX
+
 						case Msp_MISC2:
 							if v.ok == sMSP_OK {
 								uptime := binary.LittleEndian.Uint32(v.data[0:4])
 								txt := fmt.Sprintf("%ds", uptime)
 								set_value(s, IY_UPTIME, txt, bold)
 							}
-							if mspvers == 2 {
-								nxt = Msp_ANALOG2
-							} else {
-								nxt = Msp_ANALOG
-							}
+							nxt = Msp_ANALOG2
+
 						case Msp_ANALOG2:
 							if v.ok == sMSP_OK {
 								volts := float64(binary.LittleEndian.Uint16(v.data[1:3])) / 100.0
@@ -338,11 +346,7 @@ func main() {
 								txt := fmt.Sprintf("volts: %.1f, amps: %.2f", volts, amps)
 								set_value(s, IY_ANALOG, txt, bold)
 							}
-							if mspvers == 2 {
-								nxt = Msp_INAV_STATUS
-							} else {
-								nxt = Msp_STATUS_EX
-							}
+							nxt = Msp_INAV_STATUS
 
 						case Msp_INAV_STATUS:
 							if v.ok == sMSP_OK {
