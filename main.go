@@ -326,11 +326,15 @@ func main() {
 								txt := fmt.Sprintf("%ds", uptime)
 								set_value(s, IY_UPTIME, txt, bold)
 							}
-							nxt = Msp_ANALOG
-						case Msp_ANALOG:
+							if mspvers == 2 {
+								nxt = Msp_ANALOG2
+							} else {
+								nxt = Msp_ANALOG
+							}
+						case Msp_ANALOG2:
 							if v.ok == sMSP_OK {
-								volts := float64(v.data[0]) / 10.0
-								amps := float64(binary.LittleEndian.Uint16(v.data[5:7])) / 100.0
+								volts := float64(binary.LittleEndian.Uint16(v.data[1:3])) / 100.0
+								amps := float64(binary.LittleEndian.Uint16(v.data[3:5])) / 100.0
 								txt := fmt.Sprintf("volts: %.1f, amps: %.2f", volts, amps)
 								set_value(s, IY_ANALOG, txt, bold)
 							}
