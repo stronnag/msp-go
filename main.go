@@ -20,7 +20,7 @@ type SChan struct {
 	data []byte
 }
 
-const VERSION = "v0.11.0"
+const VERSION = "v0.12.0"
 
 const (
 	IY_PORT = 4 + iota
