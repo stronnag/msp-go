@@ -253,7 +253,7 @@ func (p *MSPSerial) Reader(c0 chan SChan) {
 }
 
 func encode_msp2(cmd uint16, payload []byte) []byte {
-	var paylen int16
+	var paylen = int16(0)
 	if len(payload) > 0 {
 		paylen = int16(len(payload))
 	}
@@ -276,7 +276,7 @@ func encode_msp2(cmd uint16, payload []byte) []byte {
 }
 
 func encode_msp(cmd uint16, payload []byte) []byte {
-	var paylen byte
+	var paylen = byte(0)
 	if len(payload) > 0 {
 		paylen = byte(len(payload))
 	}
@@ -384,7 +384,7 @@ func NewMSPSerial(dname string, c0 chan SChan, v2_ bool) (*MSPSerial, error) {
 	stream_ := true
 	switch dd.klass {
 	case DevClass_SERIAL:
-		pt, perr := serial.Open(dname, serial.WithBaudrate(dd.param), serial.WithReadTimeout(1))
+		pt, perr := serial.Open(dd.name, serial.WithBaudrate(dd.param), serial.WithReadTimeout(1))
 		err = perr
 		if err == nil {
 			pt.SetFirstByteReadTimeout(100)
