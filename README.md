@@ -1,4 +1,6 @@
-# Using Golang for MSP (inav etc.)
+# Migrated to [codeberg](https://codeberg.org/stronnag/msp-go)
+
+## Using Golang for MSP (inav etc.)
 
 ## Introduction
 
